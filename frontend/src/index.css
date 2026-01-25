@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+@layer utilities {
+    .border-l-12 {
+        border-left-width: 12px;
+    }
+}

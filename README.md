@@ -30,7 +30,6 @@
 
 > **💰 Cost Note for Recruiters/Testers:**  
 > This app requires an OpenAI API key with credits (~$5 minimum). Each test run costs approximately **$0.02-0.05** depending on audio length.  
-> **Alternative**: Contact me for a live demo or watch the [demo video](#) if you prefer not to set up API credits.
 
 ## 🚀 Quick Start
 

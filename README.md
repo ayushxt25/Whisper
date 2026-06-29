@@ -1,4 +1,4 @@
-# 🎤 AI Voice Summarizer
+# 🎤 Whisper
 
 > **Professional AI-powered voice note summarizer** that transcribes audio, extracts actionable insights, and generates audio summaries using state-of-the-art OpenAI models.
 

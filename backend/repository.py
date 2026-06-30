@@ -13,6 +13,9 @@ def create_meeting(
     summary: str,
     action_items: list[str],
     generated_audio_path: str | None,
+    keywords: list[str] | None = None,
+    decisions: list[str] | None = None,
+    sentiment: str = "neutral",
     owner_id: str | None = None,
 ) -> Meeting:
     meeting = Meeting(
@@ -22,6 +25,9 @@ def create_meeting(
         transcript=transcript,
         summary=summary,
         action_items=action_items,
+        keywords=keywords or [],
+        decisions=decisions or [],
+        sentiment=sentiment,
         generated_audio_path=generated_audio_path,
         owner_id=owner_id,
     )
@@ -58,6 +64,8 @@ def search_meetings(
                 Meeting.transcript.ilike(pattern, escape="\\"),
                 Meeting.summary.ilike(pattern, escape="\\"),
                 cast(Meeting.action_items, Text).ilike(pattern, escape="\\"),
+                cast(Meeting.keywords, Text).ilike(pattern, escape="\\"),
+                cast(Meeting.decisions, Text).ilike(pattern, escape="\\"),
                 Meeting.original_filename.ilike(pattern, escape="\\"),
             )
         )

@@ -1,12 +1,14 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from job_status import JobStatus
 
+
 class ActionItem(BaseModel):
     description: str
+
 
 class ProcessedAudioResponse(BaseModel):
     job_id: Optional[str] = None
@@ -14,6 +16,9 @@ class ProcessedAudioResponse(BaseModel):
     transcript: str
     summary: str
     action_items: List[str]
+    keywords: List[str] = Field(default_factory=list)
+    decisions: List[str] = Field(default_factory=list)
+    sentiment: Optional[str] = None
     audio_summary_url: Optional[str] = None
 
 
@@ -25,6 +30,9 @@ class MeetingResponse(BaseModel):
     transcript: str
     summary: str
     action_items: List[str]
+    keywords: List[str] = Field(default_factory=list)
+    decisions: List[str] = Field(default_factory=list)
+    sentiment: Optional[str] = None
     audio_summary_url: Optional[str] = None
     job_id: Optional[str] = None
     job_status: Optional[JobStatus] = None

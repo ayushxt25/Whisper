@@ -113,6 +113,9 @@ def meeting_response(meeting: Meeting) -> MeetingResponse:
         transcript=meeting.transcript,
         summary=meeting.summary,
         action_items=meeting.action_items,
+        keywords=meeting.keywords,
+        decisions=meeting.decisions,
+        sentiment=meeting.sentiment,
         audio_summary_url=meeting.generated_audio_path,
         job_id=job.id if job else None,
         job_status=job.status if job else None,
@@ -140,6 +143,8 @@ def matching_snippet(meeting: Meeting, query: str, max_length: int = 180) -> str
         meeting.summary,
         meeting.transcript,
         *meeting.action_items,
+        *meeting.keywords,
+        *meeting.decisions,
     ]
     query_lower = query.casefold()
     source = next((value for value in sources if query_lower in value.casefold()), meeting.summary)

@@ -5,6 +5,7 @@ import struct
 import wave
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from fastapi import UploadFile
 from google import genai
@@ -25,12 +26,23 @@ MOCK_SUMMARY = {
         "Run onboarding regression testing on Wednesday",
         "Share the updated troubleshooting guide with support before launch",
     ],
+    "keywords": ["customer onboarding", "quality assurance", "analytics", "product launch"],
+    "decisions": [
+        "Run focused regression testing on Wednesday",
+        "Release on Friday if no blocking issues are found",
+    ],
+    "sentiment": "positive",
 }
 
 
 class GeminiSummary(BaseModel):
     summary: str = Field(description="A concise summary of the meeting transcript")
     action_items: list[str] = Field(description="Concrete follow-up actions from the meeting")
+    keywords: list[str] = Field(description="Important topics and keywords from the meeting")
+    decisions: list[str] = Field(description="Decisions explicitly made during the meeting")
+    sentiment: Literal["positive", "neutral", "negative", "mixed"] = Field(
+        description="Overall meeting sentiment"
+    )
 
 
 @lru_cache
@@ -50,7 +62,7 @@ async def mock_summarize_text(_text: str) -> str:
 
 async def gemini_summarize_text(text: str) -> str:
     prompt = (
-        "Summarize this meeting transcript and extract concrete action items. "
+        "Summarize this meeting transcript and extract action items, keywords, decisions, and sentiment. "
         "Do not invent facts or tasks not supported by the transcript.\n\n"
         f"Transcript:\n{text}"
     )

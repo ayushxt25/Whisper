@@ -51,10 +51,19 @@ async def run_processing_job(
 
         summary_data = json.loads(summary_json_str)
         action_items = summary_data.get("action_items", [])
+        keywords = summary_data.get("keywords", [])
+        decisions = summary_data.get("decisions", [])
+        sentiment = summary_data.get("sentiment", "neutral")
         if not isinstance(summary_data.get("summary"), str):
             raise ValueError("Summary response is missing a string summary")
         if not isinstance(action_items, list) or not all(isinstance(item, str) for item in action_items):
             raise ValueError("Summary response action_items must be a list of strings")
+        if not isinstance(keywords, list) or not all(isinstance(item, str) for item in keywords):
+            raise ValueError("Summary response keywords must be a list of strings")
+        if not isinstance(decisions, list) or not all(isinstance(item, str) for item in decisions):
+            raise ValueError("Summary response decisions must be a list of strings")
+        if sentiment not in {"positive", "neutral", "negative", "mixed"}:
+            raise ValueError("Summary response sentiment is invalid")
 
         audio_filename = f"summary_{os.urandom(4).hex()}.wav"
         audio_path = settings.generated_dir / audio_filename
@@ -69,6 +78,9 @@ async def run_processing_job(
             transcript=transcript,
             summary=summary_data["summary"],
             action_items=action_items,
+            keywords=keywords,
+            decisions=decisions,
+            sentiment=sentiment,
             generated_audio_path=audio_summary_url,
         )
         response = ProcessedAudioResponse(
@@ -77,6 +89,9 @@ async def run_processing_job(
             transcript=transcript,
             summary=summary_data["summary"],
             action_items=action_items,
+            keywords=keywords,
+            decisions=decisions,
+            sentiment=sentiment,
             audio_summary_url=audio_summary_url,
         )
         await asyncio.to_thread(mark_job_completed, job_id, meeting.id)

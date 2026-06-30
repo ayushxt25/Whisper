@@ -18,6 +18,9 @@ class Meeting(Base):
     transcript: Mapped[str] = mapped_column(Text)
     summary: Mapped[str] = mapped_column(Text)
     action_items: Mapped[list[str]] = mapped_column(JSON, default=list)
+    keywords: Mapped[list[str]] = mapped_column(JSON, default=list)
+    decisions: Mapped[list[str]] = mapped_column(JSON, default=list)
+    sentiment: Mapped[str] = mapped_column(String(30), default="neutral")
     generated_audio_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     owner_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(

@@ -23,6 +23,21 @@ def init_db() -> None:
         with engine.begin() as connection:
             if "owner_id" not in columns:
                 connection.execute(text("ALTER TABLE meetings ADD COLUMN owner_id VARCHAR(255)"))
+            if "keywords" not in columns:
+                connection.execute(
+                    text("ALTER TABLE meetings ADD COLUMN keywords JSON NOT NULL DEFAULT '[]'")
+                )
+            if "decisions" not in columns:
+                connection.execute(
+                    text("ALTER TABLE meetings ADD COLUMN decisions JSON NOT NULL DEFAULT '[]'")
+                )
+            if "sentiment" not in columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE meetings ADD COLUMN sentiment VARCHAR(30) "
+                        "NOT NULL DEFAULT 'neutral'"
+                    )
+                )
             connection.execute(
                 text("CREATE INDEX IF NOT EXISTS ix_meetings_owner_id ON meetings (owner_id)")
             )

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiUrl } from '../config';
 
 const CheckIcon = () => (
   <svg width="11" height="11" viewBox="0 0 12 12" fill="none"
@@ -95,7 +96,7 @@ const SummaryView = ({ data }) => {
           <audio
             controls
             className="w-full"
-            src={`http://localhost:8000${data.audio_summary_url}`}
+            src={apiUrl(data.audio_summary_url)}
             style={{
               borderRadius: '8px',
               height: '36px',

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { apiUrl } from '../config';
 
 const SparkleIcon = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
@@ -160,7 +161,7 @@ const SummaryPanel = ({ data }) => {
           </div>
           <audio
             controls
-            src={`http://localhost:8000${d.audio_summary_url}`}
+            src={apiUrl(d.audio_summary_url)}
             style={{
               width: '100%',
               height: '36px',

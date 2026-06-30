@@ -5,6 +5,7 @@ import HistoryPanel from './components/HistoryPanel';
 import RecorderPanel from './components/RecorderPanel';
 import SummaryPanel from './components/SummaryPanel';
 import TranscriptPanel from './components/TranscriptPanel';
+import { apiUrl } from './config';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const MOCK_RESULT = {
@@ -90,22 +91,24 @@ const StatsBar = ({ data }) => {
 function App() {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleUpload = async (formData) => {
     setIsLoading(true);
     setData(null);
+    setError('');
     try {
-      const response = await fetch('http://localhost:8000/api/process-audio', {
+      const response = await fetch(apiUrl('/api/process-audio'), {
         method: 'POST',
         body: formData,
       });
-      if (!response.ok) throw new Error('Upload failed');
       const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result?.error?.message || 'Audio processing failed.');
+      }
       setData(result);
-    } catch {
-      // Mock data — backend not required for UI preview
-      await new Promise((r) => setTimeout(r, 1800));
-      setData(MOCK_RESULT);
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : 'Audio processing failed.');
     } finally {
       setIsLoading(false);
     }
@@ -264,7 +267,7 @@ function App() {
                       lineHeight: 1.6,
                       maxWidth: '200px',
                     }}>
-                      Record or upload a voice note to see your AI summary here.
+                      {error || 'Record or upload a voice note to see your AI summary here.'}
                     </p>
                   </motion.div>
                 )}

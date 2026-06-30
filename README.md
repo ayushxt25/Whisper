@@ -1,143 +1,213 @@
-# 🎤 Whisper
+# Whisper
 
-> **Professional AI-powered voice note summarizer** that transcribes audio, extracts actionable insights, and generates audio summaries using state-of-the-art OpenAI models.
+Whisper is a full-stack audio intelligence platform for uploading or recording meeting audio, generating structured meeting insights, and retaining searchable meeting history.
 
-![Demo](https://img.shields.io/badge/Status-Production_Ready-success)
-![License](https://img.shields.io/badge/License-MIT-blue)
+The project currently uses mocked transcription and a placeholder WAV audio summary. Gemini can enrich the mock transcript with summaries, action items, keywords, decisions, and sentiment. Real audio transcription and production text-to-speech are not implemented yet.
 
-## ✨ Features
+Repository: [ayushxt25/Whisper](https://github.com/ayushxt25/Whisper)
 
-- 🎙️ **Real-time Voice Recording** with visual feedback
-- 📝 **AI Transcription** using OpenAI Whisper
-- 🧠 **Smart Summarization** with GPT-4o-mini
-- ✅ **Action Item Extraction** from conversations
-- 🔊 **Audio Summary Playback** via text-to-speech
-- 💅 **Modern UI** with Tailwind CSS
+## Features
 
-## 🛠️ Tech Stack
+- Browser audio recording and file upload
+- Development mock mode with no provider key required
+- Gemini-powered meeting enrichment
+- SQLite meeting persistence through SQLAlchemy
+- Processing jobs with queued, processing, completed, and failed states
+- Meeting history and detail retrieval
+- Search across filenames, transcripts, summaries, action items, keywords, and decisions
+- Extracted action items, keywords/topics, decisions, and sentiment
+- Structured API errors and upload validation
+- Configurable CORS, upload limits, provider mode, and processing mode
+- Worker-ready task dispatcher with synchronous fallback
+
+## Current Processing Modes
+
+### Mock Mode
+
+Set `USE_MOCK_AI=true` to run without an API key. The backend uses a realistic mock transcript, mock meeting intelligence, and a generated placeholder WAV file. Meetings and processing jobs are still persisted normally.
+
+### Gemini Mode
+
+Set `USE_MOCK_AI=false` and provide `GEMINI_API_KEY`. The current hybrid pipeline uses:
+
+- Mock transcription
+- Gemini summary and intelligence extraction
+- Mock WAV audio summary
+
+Users must provide their own Gemini API key for real provider mode. Never commit `.env` or expose API keys in frontend code.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    UI["React + Vite frontend"] -->|"multipart audio upload"| API["FastAPI API"]
+    API --> JOB["Processing job"]
+    JOB --> DISPATCH["Task dispatcher"]
+    DISPATCH -->|"PROCESSING_MODE=sync"| PROCESSOR["Audio processor"]
+    DISPATCH -.->|"future worker mode"| REDIS["Redis / worker"]
+    PROCESSOR --> TRANSCRIPT["Mock transcription"]
+    TRANSCRIPT --> MODE{"USE_MOCK_AI"}
+    MODE -->|"true"| MOCK["Mock intelligence"]
+    MODE -->|"false"| GEMINI["Gemini enrichment"]
+    MOCK --> AUDIO["Placeholder WAV"]
+    GEMINI --> AUDIO
+    AUDIO --> ORM["SQLAlchemy"]
+    ORM --> DB["SQLite"]
+    API --> ORM
+```
+
+## Job Flow
+
+The API currently waits for processing to finish, preserving the original synchronous response. The job boundary is ready for a future external queue.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as FastAPI
+    participant Jobs as Job Store
+    participant Task as Task Dispatcher
+    participant AI as Mock/Gemini Pipeline
+    participant DB as Meeting Store
+
+    Client->>API: POST /api/process-audio
+    API->>API: Validate file
+    API->>Jobs: Create job (queued)
+    API->>Task: Dispatch job
+    Task->>Jobs: Set processing
+    Task->>AI: Build transcript and intelligence
+    AI-->>Task: Summary, actions, topics, decisions, sentiment
+    Task->>DB: Persist meeting
+    Task->>Jobs: Link meeting and set completed
+    Task-->>API: Compatible processing response
+    API-->>Client: Transcript, intelligence, audio URL, IDs
+    alt Processing failure
+        Task->>Jobs: Set failed
+        API-->>Client: Structured error response
+    end
+```
+
+## Technology
 
 | Layer | Technology |
-|-------|-----------|
-| **Backend** | FastAPI (Python 3.8+) |
-| **Frontend** | React 19 + Vite + TailwindCSS v4 |
-| **AI/ML** | OpenAI Whisper, GPT-4o-mini, TTS-1 |
+| --- | --- |
+| Frontend | React 19, Vite, Tailwind CSS, Framer Motion |
+| Backend | FastAPI, Python 3.11+, Uvicorn |
+| Persistence | SQLAlchemy, SQLite |
+| Intelligence | Google Gemini or local mock data |
+| Processing | Synchronous task dispatcher; Redis configuration reserved for worker mode |
 
-## 📋 Prerequisites
+## API
 
-- **Node.js** (v18+) and npm
-- **Python** (3.8+)
-- **OpenAI API Key** ([Get one here](https://platform.openai.com/api-keys))
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/health` | Service health and environment |
+| `POST` | `/api/process-audio` | Validate and process an uploaded audio file |
+| `GET` | `/api/jobs/{job_id}` | Retrieve processing job state |
+| `GET` | `/api/meetings` | List persisted meetings |
+| `GET` | `/api/meetings/{meeting_id}` | Retrieve one meeting and its intelligence |
+| `GET` | `/api/search?q={query}` | Search meeting content and metadata |
+| `GET` | `/generated/{filename}` | Serve generated placeholder audio summaries |
 
-> **💰 Cost Note for Recruiters/Testers:**  
-> This app requires an OpenAI API key with credits (~$5 minimum). Each test run costs approximately **$0.02-0.05** depending on audio length.  
+Interactive API documentation is available at `http://127.0.0.1:8000/docs` while the backend is running.
 
-## 🚀 Quick Start
+## Local Setup
 
-### 1️⃣ Clone the Repository
-```bash
-git clone <your-repo-url>
-cd ai-voice-summarizer
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+
+- npm
+- A Gemini API key only when using Gemini mode
+
+Clone the repository:
+
+```powershell
+git clone https://github.com/ayushxt25/Whisper.git
+cd Whisper
 ```
 
-### 2️⃣ Backend Setup
-```bash
+### Backend
+
+```powershell
 cd backend
-
-# Create virtual environment
-python -m venv venv
-
-# Activate it (Windows)
-.\venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Create .env file from template
-copy .env.example .env
-# Now edit .env and add your OpenAI API key
-
-# Start the server
-uvicorn main:app --reload
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+python -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-**Backend will run on:** `http://localhost:8000`
+### Frontend
 
-### 3️⃣ Frontend Setup
-```bash
+Open another terminal:
+
+```powershell
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start dev server
+Copy-Item .env.example .env
 npm run dev
 ```
 
-**Frontend will open at:** `http://localhost:5173`
+The frontend runs at `http://localhost:5173` and the backend at `http://127.0.0.1:8000`.
 
-## 📖 Usage Guide
+## Environment
 
-1. **Click the microphone button** to start recording
-2. **Speak clearly** (e.g., "Schedule a team meeting for Monday at 10 AM to discuss Q1 goals")
-3. **Click again to stop** recording
-4. **Wait ~5-10 seconds** for AI processing
-5. **Review results:**
-   - Full transcript
-   - Concise summary
-   - Extracted action items
-   - AI-generated audio summary
+Backend configuration lives in `backend/.env`. Start from `backend/.env.example`.
 
-## 🔐 Environment Variables
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `APP_NAME` | `AI Voice Summarizer` | API service name |
+| `APP_ENVIRONMENT` | `development` | Runtime environment label |
+| `USE_MOCK_AI` | `true` | Select full mock mode |
+| `GEMINI_API_KEY` | none | User-provided Gemini key |
+| `GEMINI_MODEL` | `gemini-3.5-flash` | Gemini model identifier |
+| `DATABASE_URL` | `sqlite:///./whisper.db` | SQLAlchemy database URL |
+| `PROCESSING_MODE` | `sync` | Task execution mode (`sync` or worker-ready fallback) |
+| `REDIS_URL` | `redis://localhost:6379/0` | Reserved worker queue connection |
+| `GENERATED_DIR` | `generated` | Generated audio directory |
+| `MAX_UPLOAD_SIZE_MB` | `25` | Maximum upload size |
+| `ALLOWED_AUDIO_EXTENSIONS` | configured list | Accepted filename extensions |
+| `ALLOWED_AUDIO_MIME_TYPES` | configured list | Accepted MIME types |
+| `CORS_ORIGINS` | local frontend origins | Allowed browser origins |
+| `CORS_ALLOW_CREDENTIALS` | `false` | CORS credentials setting |
+| `CORS_ALLOW_METHODS` | `GET,POST,OPTIONS` | Allowed CORS methods |
+| `CORS_ALLOW_HEADERS` | `Content-Type,Authorization` | Allowed CORS headers |
 
-Create a `.env` file in the `backend/` directory:
+Frontend configuration lives in `frontend/.env`:
 
 ```env
-OPENAI_API_KEY=sk-proj-...your-key-here...
+VITE_API_BASE_URL=http://localhost:8000
 ```
 
-> ⚠️ **Security:** Never commit your `.env` file to Git. It's already in `.gitignore`.
+## Deployment Placeholders
 
-## 📁 Project Structure
+### Frontend
 
-```
-ai-voice-summarizer/
-├── backend/
-│   ├── main.py           # FastAPI app & endpoints
-│   ├── services.py       # OpenAI integration logic
-│   ├── models.py         # Pydantic data models
-│   ├── requirements.txt  # Python dependencies
-│   └── .env.example      # Template for API keys
-├── frontend/
-│   ├── src/
-│   │   ├── App.jsx              # Main app component
-│   │   ├── components/
-│   │   │   ├── AudioRecorder.jsx  # Recording UI
-│   │   │   └── SummaryView.jsx    # Results display
-│   │   └── index.css            # Tailwind styles
-│   ├── package.json
-│   └── tailwind.config.js
-└── README.md
-```
+- Build with `npm run build`.
+- Deploy `frontend/dist` to a static hosting provider.
+- Set `VITE_API_BASE_URL` to the deployed backend URL before building.
 
-## 🎯 For Recruiters
+### Backend
 
-**Why this project demonstrates my skills:**
+- Deploy the `backend` directory to a Python ASGI hosting provider.
+- Install `backend/requirements.txt` and run Uvicorn against `main:app`.
+- Configure environment variables and persistent storage for generated files.
+- Replace the synchronous worker fallback when a queue worker is introduced.
 
-1. ✅ **Full-stack development** (React + FastAPI)
-2. ✅ **AI/ML integration** (OpenAI API, prompt engineering)
-3. ✅ **Modern tooling** (Vite, Tailwind v4, async Python)
-4. ✅ **API design** (RESTful endpoints, proper error handling)
-5. ✅ **UX focus** (responsive design, loading states, visual feedback)
+### Database
 
-**Want to test it without setup?**  
-- 📧 Email me for a live demo session
-- 🎥 Watch the demo video: [Link to demo]
-- 📸 See screenshots in `/docs/screenshots/`
+- SQLite is suitable for local development and single-instance demos.
+- Use a persistent volume when deploying SQLite.
+- Replace `DATABASE_URL` with a managed relational database URL for multi-instance deployment, with a formal migration tool added before production use.
 
-## 🤝 Contributing
+## Screenshots
 
-This is a portfolio project, but suggestions are welcome! Open an issue or PR.
+> Placeholder: Dashboard with audio recording and upload controls.
 
-## 📄 License
+> Placeholder: Processed meeting summary, actions, keywords, decisions, and sentiment.
 
-MIT License - feel free to use this for learning or your own projects.
+> Placeholder: Meeting history and search results.
+
+## License
+
+Add the project license file and terms here.

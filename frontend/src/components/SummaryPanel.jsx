@@ -33,29 +33,16 @@ const TagIcon = () => (
   </svg>
 );
 
-const MOCK_DATA = {
-  summary:
-    'Discussed Q3 product roadmap with the team. Key focus areas include improving onboarding flow, reducing churn with better in-app nudges, and shipping the mobile redesign by end of October. A/B test results expected next Thursday will inform the final approach.',
-  action_items: [
-    'Finalize mobile redesign mockups by Friday',
-    'Schedule follow-up with growth team on churn metrics',
-    'Draft onboarding flow v2 spec document',
-    'Review A/B test results from last sprint',
-    'Share Notion doc access with all stakeholders',
-  ],
-  keywords: ['onboarding', 'churn', 'mobile', 'A/B test', 'roadmap'],
-  audio_summary_url: null,
-  sentiment: 'Productive',
-  confidence: 94,
-};
-
 const SentimentPill = ({ label }) => {
   const map = {
-    Productive: { bg: 'var(--success-subtle)', border: 'rgba(16,185,129,0.2)', color: 'var(--success)' },
-    Neutral:    { bg: 'rgba(148,163,184,0.08)', border: 'rgba(148,163,184,0.15)', color: 'var(--text-2)' },
-    Urgent:     { bg: 'var(--danger-subtle)',   border: 'rgba(244,63,94,0.2)',    color: 'var(--danger)'   },
+    positive: { bg: 'var(--success-subtle)', border: 'rgba(16,185,129,0.2)', color: 'var(--success)' },
+    productive: { bg: 'var(--success-subtle)', border: 'rgba(16,185,129,0.2)', color: 'var(--success)' },
+    neutral: { bg: 'rgba(148,163,184,0.08)', border: 'rgba(148,163,184,0.15)', color: 'var(--text-2)' },
+    mixed: { bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.2)', color: 'var(--warning)' },
+    negative: { bg: 'var(--danger-subtle)', border: 'rgba(244,63,94,0.2)', color: 'var(--danger)' },
+    urgent: { bg: 'var(--danger-subtle)', border: 'rgba(244,63,94,0.2)', color: 'var(--danger)' },
   };
-  const s = map[label] || map.Neutral;
+  const s = map[String(label).toLowerCase()] || map.neutral;
   return (
     <span style={{
       fontSize: '0.62rem',
@@ -140,7 +127,8 @@ const ActionItem = ({ text, index }) => {
 };
 
 const SummaryPanel = ({ data }) => {
-  const d = data || MOCK_DATA;
+  if (!data) return null;
+  const d = data;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -198,6 +186,26 @@ const SummaryPanel = ({ data }) => {
           </div>
         </div>
 
+        {(d.job_id || d.job_status) && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.55rem',
+            flexWrap: 'wrap',
+            fontSize: '0.65rem',
+            color: 'var(--text-3)',
+          }}>
+            {d.job_status && (
+              <span className="badge badge-violet">{d.job_status}</span>
+            )}
+            {d.job_id && (
+              <span style={{ fontFamily: 'monospace', overflowWrap: 'anywhere' }}>
+                Job {d.job_id}
+              </span>
+            )}
+          </div>
+        )}
+
         <p style={{
           fontSize: '0.88rem',
           lineHeight: 1.8,
@@ -239,6 +247,54 @@ const SummaryPanel = ({ data }) => {
           </div>
         )}
       </motion.div>
+
+      {/* Decisions */}
+      {d.decisions && d.decisions.length > 0 && (
+        <motion.div
+          className="panel"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <div className="panel-header">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+              <span className="panel-label"><CheckCircleIcon /> Outcomes</span>
+              <span className="panel-title">Decisions</span>
+            </div>
+            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-3)' }}>
+              {d.decisions.length}
+            </span>
+          </div>
+
+          <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', listStyle: 'none' }}>
+            {d.decisions.map((decision, index) => (
+              <motion.li
+                key={`${decision}-${index}`}
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.07, duration: 0.35 }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '0.65rem',
+                  padding: '0.65rem 0.75rem',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'rgba(124,58,237,0.04)',
+                  border: '1px solid var(--border-subtle)',
+                  color: 'var(--text-2)',
+                  fontSize: '0.82rem',
+                  lineHeight: 1.6,
+                }}
+              >
+                <span style={{ color: 'var(--violet-soft)', marginTop: '2px', flexShrink: 0 }}>
+                  <CheckCircleIcon />
+                </span>
+                {decision}
+              </motion.li>
+            ))}
+          </ul>
+        </motion.div>
+      )}
 
       {/* Action items */}
       {d.action_items && d.action_items.length > 0 && (

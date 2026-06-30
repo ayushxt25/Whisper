@@ -1,74 +1,90 @@
 import asyncio
-import os
-import tempfile
+import json
+import math
+import struct
+import wave
 from functools import lru_cache
 from pathlib import Path
 
-import openai
 from fastapi import UploadFile
+from google import genai
+from pydantic import BaseModel, Field
 
 from config import settings
 
 
+MOCK_TRANSCRIPT = """The product team reviewed the upcoming customer onboarding release. Maya confirmed that the guided setup flow is ready for final QA, while Daniel noted that two analytics events still need validation before launch. The team agreed to run a focused regression test on Wednesday and release the update on Friday if no blocking issues are found.
+
+Maya will publish the final onboarding checklist by Tuesday afternoon. Daniel will verify the remaining analytics events and share the results in the launch channel. The support team will also receive an updated troubleshooting guide before the release."""
+
+MOCK_SUMMARY = {
+    "summary": "The team reviewed the customer onboarding release and confirmed it is nearly ready. Final QA, analytics validation, and support documentation remain before the planned Friday launch.",
+    "action_items": [
+        "Publish the final onboarding checklist by Tuesday afternoon",
+        "Validate the two remaining analytics events",
+        "Run onboarding regression testing on Wednesday",
+        "Share the updated troubleshooting guide with support before launch",
+    ],
+}
+
+
+class GeminiSummary(BaseModel):
+    summary: str = Field(description="A concise summary of the meeting transcript")
+    action_items: list[str] = Field(description="Concrete follow-up actions from the meeting")
+
+
 @lru_cache
-def _client() -> openai.OpenAI:
-    if not settings.openai_api_key:
-        raise RuntimeError("OPENAI_API_KEY is not configured")
-    return openai.OpenAI(api_key=settings.openai_api_key)
+def _gemini_client() -> genai.Client:
+    if not settings.gemini_api_key:
+        raise RuntimeError("GEMINI_API_KEY is not configured")
+    return genai.Client(api_key=settings.gemini_api_key)
 
 
-async def transcribe_audio(file: UploadFile) -> str:
-    suffix = Path(file.filename or "audio").suffix.lower()
-    content = await file.read()
-    temp_path = ""
-
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-            temp_file.write(content)
-            temp_path = temp_file.name
-
-        def transcribe() -> str:
-            with open(temp_path, "rb") as audio_file:
-                transcript = _client().audio.transcriptions.create(
-                    model=settings.transcription_model,
-                    file=audio_file,
-                )
-            return transcript.text
-
-        return await asyncio.to_thread(transcribe)
-    finally:
-        if temp_path and os.path.exists(temp_path):
-            os.remove(temp_path)
+async def mock_transcribe_audio(_file: UploadFile) -> str:
+    return MOCK_TRANSCRIPT
 
 
-async def summarize_text(text: str) -> str:
+async def mock_summarize_text(_text: str) -> str:
+    return json.dumps(MOCK_SUMMARY)
+
+
+async def gemini_summarize_text(text: str) -> str:
+    prompt = (
+        "Summarize this meeting transcript and extract concrete action items. "
+        "Do not invent facts or tasks not supported by the transcript.\n\n"
+        f"Transcript:\n{text}"
+    )
+
     def summarize() -> str:
-        response = _client().chat.completions.create(
-            model=settings.summary_model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a helpful AI assistant. Summarize the following text and extract actionable items. Return JSON with keys: 'summary' (string) and 'action_items' (list of strings).",
-                },
-                {"role": "user", "content": text},
-            ],
-            response_format={"type": "json_object"},
+        interaction = _gemini_client().interactions.create(
+            model=settings.gemini_model,
+            input=prompt,
+            response_format={
+                "type": "text",
+                "mime_type": "application/json",
+                "schema": GeminiSummary.model_json_schema(),
+            },
         )
-        return response.choices[0].message.content or ""
+        return interaction.output_text
 
     return await asyncio.to_thread(summarize)
 
 
-async def generate_speech(text: str, output_file: str | Path) -> Path:
+async def generate_mock_speech(output_file: str | Path) -> Path:
     output_path = Path(output_file)
 
-    def synthesize() -> None:
-        response = _client().audio.speech.create(
-            model=settings.tts_model,
-            voice=settings.tts_voice,
-            input=text,
-        )
-        response.stream_to_file(output_path)
+    def synthesize_placeholder() -> None:
+        sample_rate = 16_000
+        frames = bytearray()
+        for index in range(sample_rate):
+            sample = int(4_000 * math.sin(2 * math.pi * 440 * index / sample_rate))
+            frames.extend(struct.pack("<h", sample))
 
-    await asyncio.to_thread(synthesize)
+        with wave.open(str(output_path), "wb") as audio_file:
+            audio_file.setnchannels(1)
+            audio_file.setsampwidth(2)
+            audio_file.setframerate(sample_rate)
+            audio_file.writeframes(frames)
+
+    await asyncio.to_thread(synthesize_placeholder)
     return output_path

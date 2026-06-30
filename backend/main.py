@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -12,12 +13,20 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from config import settings
+from database import init_db
+from db_models import Meeting
 from errors import APIError
-from models import ProcessedAudioResponse
-from services import generate_speech, summarize_text, transcribe_audio
+from models import MeetingResponse, ProcessedAudioResponse
+from repository import create_meeting, get_meeting, list_meetings
+from services import (
+    gemini_summarize_text,
+    generate_mock_speech,
+    mock_summarize_text,
+    mock_transcribe_audio,
+)
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("uvicorn.error")
 app = FastAPI(title=settings.app_name)
 
 app.add_middleware(
@@ -29,6 +38,7 @@ app.add_middleware(
 )
 
 settings.generated_dir.mkdir(parents=True, exist_ok=True)
+init_db()
 app.mount("/generated", StaticFiles(directory=str(settings.generated_dir)), name="generated")
 
 
@@ -68,7 +78,7 @@ async def unexpected_error_handler(_request: Request, exc: Exception) -> JSONRes
     )
 
 
-async def validate_upload(file: UploadFile) -> None:
+async def validate_upload(file: UploadFile) -> int:
     if not file.filename:
         raise APIError(400, "missing_filename", "An audio filename is required.")
 
@@ -90,6 +100,7 @@ async def validate_upload(file: UploadFile) -> None:
             "file_too_large",
             f"The audio file exceeds the {settings.max_upload_size_mb} MB limit.",
         )
+    return len(content)
 
 
 @app.get("/health")
@@ -97,31 +108,80 @@ async def health() -> dict[str, str]:
     return {"status": "ok", "service": settings.app_name, "environment": settings.app_environment}
 
 
+def meeting_response(meeting: Meeting) -> MeetingResponse:
+    return MeetingResponse(
+        id=meeting.id,
+        original_filename=meeting.original_filename,
+        content_type=meeting.content_type,
+        file_size_bytes=meeting.file_size_bytes,
+        transcript=meeting.transcript,
+        summary=meeting.summary,
+        action_items=meeting.action_items,
+        audio_summary_url=meeting.generated_audio_path,
+        created_at=meeting.created_at,
+    )
+
+
+@app.get("/api/meetings", response_model=list[MeetingResponse])
+def meetings(limit: int = 50, offset: int = 0) -> list[MeetingResponse]:
+    return [meeting_response(meeting) for meeting in list_meetings(limit=limit, offset=offset)]
+
+
+@app.get("/api/meetings/{meeting_id}", response_model=MeetingResponse)
+def meeting_detail(meeting_id: str) -> MeetingResponse:
+    meeting = get_meeting(meeting_id)
+    if meeting is None:
+        raise APIError(404, "meeting_not_found", "The meeting was not found.")
+    return meeting_response(meeting)
+
+
 @app.post("/api/process-audio", response_model=ProcessedAudioResponse)
 async def process_audio(file: UploadFile = File(...)) -> ProcessedAudioResponse:
-    await validate_upload(file)
+    file_size_bytes = await validate_upload(file)
+    mode = "MOCK" if settings.use_mock_ai else "GEMINI"
+    logger.info("Processing %s using %s mode", file.filename, mode)
+
+    if not settings.use_mock_ai and not settings.gemini_api_key:
+        raise APIError(503, "gemini_not_configured", "Gemini is not configured.")
 
     try:
-        transcript = await transcribe_audio(file)
-        summary_json_str = await summarize_text(transcript)
+        transcript = await mock_transcribe_audio(file)
+        if settings.use_mock_ai:
+            summary_json_str = await mock_summarize_text(transcript)
+        else:
+            summary_json_str = await gemini_summarize_text(transcript)
+
         summary_data = json.loads(summary_json_str)
         if not isinstance(summary_data.get("summary"), str):
             raise ValueError("Summary response is missing a string summary")
         if not isinstance(summary_data.get("action_items", []), list):
             raise ValueError("Summary response action_items must be a list")
 
-        audio_filename = f"summary_{os.urandom(4).hex()}.mp3"
+        audio_filename = f"summary_{os.urandom(4).hex()}.wav"
         audio_path = settings.generated_dir / audio_filename
-        await generate_speech(summary_data["summary"], audio_path)
+        await generate_mock_speech(audio_path)
 
-        return ProcessedAudioResponse(
+        audio_summary_url = f"/generated/{audio_filename}"
+        meeting = await asyncio.to_thread(
+            create_meeting,
+            original_filename=file.filename or "audio",
+            content_type=(file.content_type or "application/octet-stream").split(";", 1)[0],
+            file_size_bytes=file_size_bytes,
             transcript=transcript,
             summary=summary_data["summary"],
             action_items=summary_data.get("action_items", []),
-            audio_summary_url=f"/generated/{audio_filename}",
+            generated_audio_path=audio_summary_url,
+        )
+
+        return ProcessedAudioResponse(
+            meeting_id=meeting.id,
+            transcript=transcript,
+            summary=summary_data["summary"],
+            action_items=summary_data.get("action_items", []),
+            audio_summary_url=audio_summary_url,
         )
     except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-        logger.exception("OpenAI returned an invalid structured response")
+        logger.exception("AI processing returned an invalid structured response")
         raise APIError(502, "invalid_ai_response", "The AI service returned an invalid response.") from None
     except Exception:
         logger.exception("Audio processing failed")

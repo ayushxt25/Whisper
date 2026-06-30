@@ -12,6 +12,9 @@ venv/
 build/
 dist/
 *.egg-info/
+*.db
+*.db-shm
+*.db-wal
 
 # Node
 node_modules/

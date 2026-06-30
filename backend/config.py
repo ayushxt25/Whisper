@@ -27,15 +27,23 @@ def _path(name: str, default: str) -> Path:
     return value if value.is_absolute() else BASE_DIR / value
 
 
+def _database_url() -> str:
+    value = os.getenv("DATABASE_URL", "sqlite:///./whisper.db")
+    prefix = "sqlite:///./"
+    if value.startswith(prefix):
+        database_path = (BASE_DIR / value.removeprefix(prefix)).resolve()
+        return f"sqlite:///{database_path.as_posix()}"
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str
     app_environment: str
-    openai_api_key: str
-    transcription_model: str
-    summary_model: str
-    tts_model: str
-    tts_voice: str
+    use_mock_ai: bool
+    database_url: str
+    gemini_api_key: str
+    gemini_model: str
     generated_dir: Path
     max_upload_size_mb: int
     allowed_audio_extensions: tuple[str, ...]
@@ -53,11 +61,13 @@ class Settings:
 settings = Settings(
     app_name=os.getenv("APP_NAME", "AI Voice Summarizer"),
     app_environment=os.getenv("APP_ENVIRONMENT", "development"),
-    openai_api_key=os.getenv("OPENAI_API_KEY", ""),
-    transcription_model=os.getenv("OPENAI_TRANSCRIPTION_MODEL", "whisper-1"),
-    summary_model=os.getenv("OPENAI_SUMMARY_MODEL", "gpt-4o-mini"),
-    tts_model=os.getenv("OPENAI_TTS_MODEL", "tts-1"),
-    tts_voice=os.getenv("OPENAI_TTS_VOICE", "alloy"),
+    use_mock_ai=_bool(
+        "USE_MOCK_AI",
+        os.getenv("APP_ENVIRONMENT", "development").strip().lower() == "development",
+    ),
+    database_url=_database_url(),
+    gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
+    gemini_model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
     generated_dir=_path("GENERATED_DIR", "generated"),
     max_upload_size_mb=int(os.getenv("MAX_UPLOAD_SIZE_MB", "25")),
     allowed_audio_extensions=_extensions(),

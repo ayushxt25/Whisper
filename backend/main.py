@@ -2,7 +2,7 @@ import asyncio
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, File, Request, UploadFile
+from fastapi import FastAPI, File, Query, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,9 +15,9 @@ from database import init_db
 from db_models import Meeting, ProcessingJob
 from errors import APIError
 from job_repository import create_processing_job, get_processing_job
-from models import MeetingResponse, ProcessedAudioResponse, ProcessingJobResponse
+from models import MeetingResponse, ProcessedAudioResponse, ProcessingJobResponse, SearchResultResponse
 from processor import run_processing_job
-from repository import get_meeting, list_meetings
+from repository import get_meeting, list_meetings, search_meetings
 
 
 logger = logging.getLogger("uvicorn.error")
@@ -133,6 +133,22 @@ def processing_job_response(job: ProcessingJob) -> ProcessingJobResponse:
     )
 
 
+def matching_snippet(meeting: Meeting, query: str, max_length: int = 180) -> str:
+    sources = [
+        meeting.original_filename,
+        meeting.summary,
+        meeting.transcript,
+        *meeting.action_items,
+    ]
+    query_lower = query.casefold()
+    source = next((value for value in sources if query_lower in value.casefold()), meeting.summary)
+    match_index = source.casefold().find(query_lower)
+    start = max(0, match_index - max_length // 3)
+    end = min(len(source), start + max_length)
+    snippet = source[start:end].strip()
+    return f"{'...' if start else ''}{snippet}{'...' if end < len(source) else ''}"
+
+
 @app.get("/api/meetings", response_model=list[MeetingResponse])
 def meetings(limit: int = 50, offset: int = 0) -> list[MeetingResponse]:
     return [meeting_response(meeting) for meeting in list_meetings(limit=limit, offset=offset)]
@@ -152,6 +168,27 @@ def processing_job_detail(job_id: str) -> ProcessingJobResponse:
     if job is None:
         raise APIError(404, "job_not_found", "The processing job was not found.")
     return processing_job_response(job)
+
+
+@app.get("/api/search", response_model=list[SearchResultResponse])
+def search(
+    q: str = Query(min_length=1, max_length=200),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> list[SearchResultResponse]:
+    query = q.strip()
+    if not query:
+        raise APIError(400, "search_query_required", "A search query is required.")
+
+    matches = search_meetings(query=query, owner_id=None, limit=limit)
+    return [
+        SearchResultResponse(
+            meeting_id=meeting.id,
+            title=meeting.original_filename,
+            snippet=matching_snippet(meeting, query),
+            created_at=meeting.created_at,
+        )
+        for meeting in matches
+    ]
 
 
 @app.post("/api/process-audio", response_model=ProcessedAudioResponse)

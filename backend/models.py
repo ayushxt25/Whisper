@@ -41,3 +41,10 @@ class ProcessingJobResponse(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     updated_at: datetime
+
+
+class SearchResultResponse(BaseModel):
+    meeting_id: str
+    title: str
+    snippet: str
+    created_at: datetime

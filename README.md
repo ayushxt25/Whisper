@@ -1,129 +1,145 @@
 # Whisper
 
-Whisper is a full-stack audio intelligence platform for uploading or recording meeting audio, generating structured meeting insights, and retaining searchable meeting history.
+Whisper is a full-stack audio intelligence platform that turns uploaded or browser-recorded audio into structured, searchable meeting records. It combines a React workspace with a FastAPI API, persistent job and meeting storage, and optional Gemini enrichment.
 
-The project currently uses mocked transcription and a placeholder WAV audio summary. Gemini can enrich the mock transcript with summaries, action items, keywords, decisions, and sentiment. Real audio transcription and production text-to-speech are not implemented yet.
+> Transcription and generated speech are currently mocked. In Gemini mode, Gemini generates the summary, action items, topics, decisions, and sentiment from the mock transcript. Real speech-to-text and production text-to-speech are not implemented.
 
-Repository: [ayushxt25/Whisper](https://github.com/ayushxt25/Whisper)
+## Live Project
+
+- [Open Whisper](https://whisper-sandy-gamma.vercel.app)
+- [Backend API](https://whisper-api-09yx.onrender.com)
+- [Interactive API docs](https://whisper-api-09yx.onrender.com/docs)
+- [Health check](https://whisper-api-09yx.onrender.com/health)
+
+The Render free service can take up to a minute to wake after inactivity.
 
 ## Features
 
 - Browser audio recording and file upload
-- Development mock mode with no provider key required
-- Gemini-powered meeting enrichment
-- SQLite or PostgreSQL meeting persistence through SQLAlchemy
-- Processing jobs with queued, processing, completed, and failed states
-- Meeting history and detail retrieval
-- Search across filenames, transcripts, summaries, action items, keywords, and decisions
-- Extracted action items, keywords/topics, decisions, and sentiment
-- Structured API errors and upload validation
-- Configurable CORS, upload limits, provider mode, and processing mode
-- Worker-ready task dispatcher with synchronous fallback
+- Validated audio size, MIME type, and extension
+- Mock mode with no provider key required
+- Gemini-generated summaries, action items, topics, decisions, and sentiment
+- Persistent meetings and processing jobs with SQLAlchemy
+- SQLite for local development and PostgreSQL for deployment
+- Meeting history, detail retrieval, and full transcript views
+- Search across filenames, transcripts, summaries, actions, topics, and decisions
+- Job states for queued, processing, completed, and failed work
+- Structured API errors and environment-controlled CORS
+- Worker-ready processing boundary with synchronous execution today
 
-## Current Processing Modes
+## Screenshots
 
-### Mock Mode
+### Dashboard
 
-Set `USE_MOCK_AI=true` to run without an API key. The backend uses a realistic mock transcript, mock meeting intelligence, and a generated placeholder WAV file. Meetings and processing jobs are still persisted normally.
+![Whisper dashboard](docs/screenshots/dashboard.png)
 
-### Gemini Mode
+### Processed Meeting
 
-Set `USE_MOCK_AI=false` and provide `GEMINI_API_KEY`. The current hybrid pipeline uses:
+![Processed meeting result](docs/screenshots/meeting-result.png)
 
-- Mock transcription
-- Gemini summary and intelligence extraction
-- Mock WAV audio summary
+### Summary, Decisions, and Action Items
 
-Users must provide their own Gemini API key for real provider mode. Never commit `.env` or expose API keys in frontend code.
+![Meeting intelligence](docs/screenshots/meeting-intelligence.png)
+
+### Full Transcript
+
+![Expanded full transcript](docs/screenshots/full-transcript.png)
+
+### Meeting History
+
+![Persistent meeting history](docs/screenshots/history-panel.png)
+
+### API Documentation
+
+![FastAPI documentation](docs/screenshots/api-docs.png)
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    UI["React + Vite frontend"] -->|"multipart audio upload"| API["FastAPI API"]
-    API --> JOB["Processing job"]
-    JOB --> DISPATCH["Task dispatcher"]
-    DISPATCH -->|"PROCESSING_MODE=sync"| PROCESSOR["Audio processor"]
-    DISPATCH -.->|"future worker mode"| REDIS["Redis / worker"]
-    PROCESSOR --> TRANSCRIPT["Mock transcription"]
-    TRANSCRIPT --> MODE{"USE_MOCK_AI"}
-    MODE -->|"true"| MOCK["Mock intelligence"]
-    MODE -->|"false"| GEMINI["Gemini enrichment"]
-    MOCK --> AUDIO["Placeholder WAV"]
-    GEMINI --> AUDIO
-    AUDIO --> ORM["SQLAlchemy"]
-    ORM --> DB["SQLite / PostgreSQL"]
-    API --> ORM
+    Client["Browser user"] --> Frontend["React 19 + Vite frontend"]
+    Frontend -->|"HTTPS / JSON + multipart audio"| API["FastAPI backend"]
+    API --> Jobs["Processing job service"]
+    Jobs --> Pipeline["Audio intelligence pipeline"]
+    Pipeline --> Transcript["Mock transcription"]
+    Transcript --> Mode{"USE_MOCK_AI"}
+    Mode -->|"true"| Mock["Local mock intelligence"]
+    Mode -->|"false"| Gemini["Google Gemini enrichment"]
+    Mock --> Audio["Placeholder WAV summary"]
+    Gemini --> Audio
+    Jobs --> ORM["SQLAlchemy"]
+    ORM --> LocalDB["SQLite - local"]
+    ORM --> ProductionDB["Render PostgreSQL - production"]
+    API --> Files["Generated audio directory"]
 ```
 
-## Job Flow
-
-The API currently waits for processing to finish, preserving the original synchronous response. The job boundary is ready for a future external queue.
+## Processing Flow
 
 ```mermaid
 sequenceDiagram
-    participant Client
+    participant User
+    participant UI as React UI
     participant API as FastAPI
-    participant Jobs as Job Store
-    participant Task as Task Dispatcher
+    participant Job as Processing Job
     participant AI as Mock/Gemini Pipeline
-    participant DB as Meeting Store
+    participant DB as Meeting Database
 
-    Client->>API: POST /api/process-audio
-    API->>API: Validate file
-    API->>Jobs: Create job (queued)
-    API->>Task: Dispatch job
-    Task->>Jobs: Set processing
-    Task->>AI: Build transcript and intelligence
-    AI-->>Task: Summary, actions, topics, decisions, sentiment
-    Task->>DB: Persist meeting
-    Task->>Jobs: Link meeting and set completed
-    Task-->>API: Compatible processing response
-    API-->>Client: Transcript, intelligence, audio URL, IDs
-    alt Processing failure
-        Task->>Jobs: Set failed
-        API-->>Client: Structured error response
+    User->>UI: Record or upload audio
+    UI->>API: POST /api/process-audio
+    API->>API: Validate size, MIME type, and extension
+    API->>Job: Create queued job
+    Job->>Job: Mark processing
+    Job->>AI: Process audio metadata
+    AI->>AI: Build mock transcript
+    alt Full mock mode
+        AI->>AI: Generate mock intelligence
+    else Gemini mode
+        AI->>AI: Generate Gemini intelligence
     end
+    AI->>DB: Persist meeting and intelligence
+    Job->>DB: Link meeting and mark completed
+    API-->>UI: Compatible result with meeting_id and job_id
+    UI->>API: GET meetings, jobs, or search results
 ```
 
-## Technology
+The current dispatcher executes synchronously so `POST /api/process-audio` still returns the complete result. Its task boundary is prepared for a future external worker, but Redis-backed execution is not implemented.
+
+## Tech Stack
 
 | Layer | Technology |
 | --- | --- |
-| Frontend | React 19, Vite, Tailwind CSS, Framer Motion |
+| Frontend | React 19, Vite 7, Tailwind CSS 4, Framer Motion |
 | Backend | FastAPI, Python 3.11+, Uvicorn |
-| Persistence | SQLAlchemy, SQLite (local), PostgreSQL (deployment) |
-| Intelligence | Google Gemini or local mock data |
-| Processing | Synchronous task dispatcher; Redis configuration reserved for worker mode |
+| Data | SQLAlchemy, SQLite, PostgreSQL, Psycopg |
+| Intelligence | Google Gemini or deterministic mock data |
+| Deployment | Vercel, Render Web Service, Render PostgreSQL |
 
 ## API
 
-| Method | Endpoint | Description |
+| Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `GET` | `/health` | Service health and environment |
-| `POST` | `/api/process-audio` | Validate and process an uploaded audio file |
-| `GET` | `/api/jobs/{job_id}` | Retrieve processing job state |
+| `GET` | `/health` | Return service and environment health |
+| `POST` | `/api/process-audio` | Validate an upload, process it, and persist the result |
+| `GET` | `/api/jobs/{job_id}` | Return processing status and linked meeting ID |
 | `GET` | `/api/meetings` | List persisted meetings |
-| `GET` | `/api/meetings/{meeting_id}` | Retrieve one meeting and its intelligence |
+| `GET` | `/api/meetings/{meeting_id}` | Return one meeting with all intelligence fields |
 | `GET` | `/api/search?q={query}` | Search meeting content and metadata |
-| `GET` | `/generated/{filename}` | Serve generated placeholder audio summaries |
-
-Interactive API documentation is available at `http://127.0.0.1:8000/docs` while the backend is running.
+| `GET` | `/generated/{filename}` | Serve a generated placeholder audio summary |
+| `GET` | `/docs` | Open the interactive OpenAPI documentation |
 
 ## Local Setup
 
-### Prerequisites
+### Requirements
 
 - Python 3.11+
 - Node.js 20+
 - npm
-- A Gemini API key only when using Gemini mode
-
-Clone the repository:
+- A user-provided Gemini API key only for Gemini mode
 
 ```powershell
 git clone https://github.com/ayushxt25/Whisper.git
 cd Whisper
+git switch feature/audio-intelligence-platform
 ```
 
 ### Backend
@@ -139,7 +155,7 @@ python -m uvicorn main:app --host 127.0.0.1 --port 8000
 
 ### Frontend
 
-Open another terminal:
+In a second terminal:
 
 ```powershell
 cd frontend
@@ -148,107 +164,94 @@ Copy-Item .env.example .env
 npm run dev
 ```
 
-The frontend runs at `http://localhost:5173` and the backend at `http://127.0.0.1:8000`.
+Open `http://localhost:5173`. The local API and docs run at `http://127.0.0.1:8000` and `http://127.0.0.1:8000/docs`.
 
-## Environment
+## Configuration
 
-Backend configuration lives in `backend/.env`. Start from `backend/.env.example`.
+Never commit `.env` files or expose provider keys in frontend variables. Start from the committed `.env.example` files.
 
-| Variable | Default | Purpose |
+### Backend
+
+| Variable | Local default | Purpose |
 | --- | --- | --- |
-| `APP_NAME` | `AI Voice Summarizer` | API service name |
 | `APP_ENVIRONMENT` | `development` | Runtime environment label |
-| `USE_MOCK_AI` | `true` | Select full mock mode |
-| `GEMINI_API_KEY` | none | User-provided Gemini key |
+| `USE_MOCK_AI` | `true` | Select full mock mode when true |
+| `GEMINI_API_KEY` | placeholder | User-provided Gemini key; required only when mock mode is false |
 | `GEMINI_MODEL` | `gemini-3.5-flash` | Gemini model identifier |
-| `DATABASE_URL` | `sqlite:///./whisper.db` | SQLite locally; PostgreSQL URL in production |
-| `PROCESSING_MODE` | `sync` | Task execution mode (`sync` or worker-ready fallback) |
-| `REDIS_URL` | `redis://localhost:6379/0` | Reserved worker queue connection |
-| `GENERATED_DIR` | `generated` | Generated audio directory |
-| `MAX_UPLOAD_SIZE_MB` | `25` | Maximum upload size |
-| `ALLOWED_AUDIO_EXTENSIONS` | configured list | Accepted filename extensions |
-| `ALLOWED_AUDIO_MIME_TYPES` | configured list | Accepted MIME types |
-| `CORS_ORIGINS` | local frontend origins | Allowed browser origins |
-| `CORS_ALLOW_CREDENTIALS` | `false` | CORS credentials setting |
-| `CORS_ALLOW_METHODS` | `GET,POST,OPTIONS` | Allowed CORS methods |
-| `CORS_ALLOW_HEADERS` | `Content-Type,Authorization` | Allowed CORS headers |
+| `DATABASE_URL` | `sqlite:///./whisper.db` | SQLite locally or PostgreSQL in production |
+| `PROCESSING_MODE` | `sync` | Current processing strategy |
+| `REDIS_URL` | `redis://localhost:6379/0` | Reserved for future worker infrastructure |
+| `GENERATED_DIR` | `generated` | Placeholder audio output directory |
+| `MAX_UPLOAD_SIZE_MB` | `25` | Maximum accepted upload size |
+| `CORS_ORIGINS` | local frontend origins | Comma-separated allowed browser origins |
+| `CORS_ALLOW_CREDENTIALS` | `false` | Credential policy for CORS |
 
-Frontend configuration lives in `frontend/.env`:
+Accepted upload extensions and MIME types are configurable through `ALLOWED_AUDIO_EXTENSIONS` and `ALLOWED_AUDIO_MIME_TYPES`.
+
+### Frontend
 
 ```env
 VITE_API_BASE_URL=http://localhost:8000
 ```
 
-## Deployment: Vercel + Render + PostgreSQL
+## Provider Modes
 
-### 1. Render PostgreSQL
+### Mock Mode
 
-The included `render.yaml` creates a Render web service and a linked `whisper-postgres` database. For Supabase instead, create a PostgreSQL project and set the Render service's `DATABASE_URL` to its connection string.
+Set `USE_MOCK_AI=true`. Requests use a realistic fixed transcript, mock structured intelligence, and a placeholder WAV response. No provider key is needed, and meetings/jobs are persisted normally.
 
-The backend accepts `postgres://`, `postgresql://`, and `postgresql+psycopg://` URLs. SQLite remains the local default.
+### Gemini Mode
 
-### 2. Render Backend
+Set `USE_MOCK_AI=false` and provide your own `GEMINI_API_KEY`. The pipeline continues to use mock transcription and placeholder audio, while Gemini generates the summary, action items, topics, decisions, and sentiment. The key must remain server-side.
 
-Create a Render Blueprint from this repository or configure a Web Service manually:
+## Deployment
 
-| Render setting | Value |
+### Render PostgreSQL
+
+Create a PostgreSQL database and provide its internal connection URL as `DATABASE_URL`. The backend accepts `postgres://`, `postgresql://`, and `postgresql+psycopg://` URLs and creates missing tables on startup.
+
+### Render Backend
+
+The repository includes `render.yaml`. A manual service uses:
+
+| Setting | Value |
 | --- | --- |
-| Root Directory | `backend` |
-| Runtime | Python |
-| Build Command | `pip install -r requirements.txt` |
-| Start Command | `uvicorn main:app --host 0.0.0.0 --port $PORT` |
-| Health Check Path | `/health` |
+| Root directory | `backend` |
+| Build command | `pip install -r requirements.txt` |
+| Start command | `uvicorn main:app --host 0.0.0.0 --port $PORT` |
+| Health path | `/health` |
 
-Required Render environment variables:
+Production variables should include:
 
 ```env
 APP_ENVIRONMENT=production
-DATABASE_URL=<Render or Supabase PostgreSQL connection string>
+DATABASE_URL=<postgresql-connection-url>
 PROCESSING_MODE=sync
-USE_MOCK_AI=true
-CORS_ORIGINS=https://your-whisper-app.vercel.app
+USE_MOCK_AI=false
+GEMINI_API_KEY=<your-own-key>
+CORS_ORIGINS=https://your-project.vercel.app
 CORS_ALLOW_CREDENTIALS=false
 GENERATED_DIR=/tmp/whisper-generated
 ```
 
-For Gemini mode, also set `GEMINI_API_KEY` and change `USE_MOCK_AI=false`. Users must supply their own key. Keep `CORS_ORIGINS` restricted to the exact Vercel production URL, without a trailing slash. Add additional comma-separated origins only when needed.
+### Vercel Frontend
 
-### 3. Vercel Frontend
-
-Import the repository into Vercel with these settings:
-
-| Vercel setting | Value |
+| Setting | Value |
 | --- | --- |
-| Root Directory | `frontend` |
-| Framework Preset | Vite |
-| Install Command | `npm install` |
-| Build Command | `npm run build` |
-| Output Directory | `dist` |
+| Root directory | `frontend` |
+| Framework | Vite |
+| Build command | `npm run build` |
+| Output directory | `dist` |
 
-Set this Vercel environment variable for Production and Preview as appropriate:
+Set `VITE_API_BASE_URL` to the Render backend URL and redeploy. Then set the backend `CORS_ORIGINS` to the exact Vercel production origin without a trailing slash.
 
-```env
-VITE_API_BASE_URL=https://your-whisper-api.onrender.com
-```
+### Storage Limitation
 
-Redeploy the frontend after changing `VITE_API_BASE_URL`. After Vercel assigns the production domain, update Render's `CORS_ORIGINS` and redeploy the backend.
+Render's `/tmp` filesystem is ephemeral. Placeholder WAV files can disappear after a restart or redeploy even though meeting records remain in PostgreSQL. Durable object storage or a persistent disk is not implemented.
 
-### Generated Audio Limitation
+## Security Notes
 
-Generated WAV files are served correctly from `/generated`, but Render's default filesystem is ephemeral. Files stored under `/tmp/whisper-generated` can disappear after a restart, redeploy, or instance replacement. Meeting records remain in PostgreSQL, but old audio URLs may stop working. Production-grade durable audio requires object storage or a Render persistent disk, which is not implemented in the application yet.
-
-### Database Lifecycle
-
-The backend creates missing tables on startup. Use a formal migration tool before making production schema changes after launch. Do not use SQLite for a multi-instance Render deployment.
-
-## Screenshots
-
-> Placeholder: Dashboard with audio recording and upload controls.
-
-> Placeholder: Processed meeting summary, actions, keywords, decisions, and sentiment.
-
-> Placeholder: Meeting history and search results.
-
-## License
-
-Add the project license file and terms here.
+- Supply your own provider API keys and store them only in backend secrets.
+- Keep `.env` files untracked.
+- Restrict production CORS to known frontend origins.
+- Replace startup table creation with formal migrations before evolving a production schema.

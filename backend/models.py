@@ -3,10 +3,13 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
+from job_status import JobStatus
+
 class ActionItem(BaseModel):
     description: str
 
 class ProcessedAudioResponse(BaseModel):
+    job_id: Optional[str] = None
     meeting_id: Optional[str] = None
     transcript: str
     summary: str
@@ -23,4 +26,18 @@ class MeetingResponse(BaseModel):
     summary: str
     action_items: List[str]
     audio_summary_url: Optional[str] = None
+    job_id: Optional[str] = None
+    job_status: Optional[JobStatus] = None
     created_at: datetime
+
+
+class ProcessingJobResponse(BaseModel):
+    id: str
+    status: JobStatus
+    original_filename: str
+    meeting_id: Optional[str] = None
+    error_message: Optional[str] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    updated_at: datetime

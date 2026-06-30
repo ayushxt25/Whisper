@@ -1,7 +1,5 @@
 import asyncio
-import json
 import logging
-import os
 from pathlib import Path
 
 from fastapi import FastAPI, File, Request, UploadFile
@@ -14,16 +12,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from config import settings
 from database import init_db
-from db_models import Meeting
+from db_models import Meeting, ProcessingJob
 from errors import APIError
-from models import MeetingResponse, ProcessedAudioResponse
-from repository import create_meeting, get_meeting, list_meetings
-from services import (
-    gemini_summarize_text,
-    generate_mock_speech,
-    mock_summarize_text,
-    mock_transcribe_audio,
-)
+from job_repository import create_processing_job, get_processing_job
+from models import MeetingResponse, ProcessedAudioResponse, ProcessingJobResponse
+from processor import run_processing_job
+from repository import get_meeting, list_meetings
 
 
 logger = logging.getLogger("uvicorn.error")
@@ -109,6 +103,7 @@ async def health() -> dict[str, str]:
 
 
 def meeting_response(meeting: Meeting) -> MeetingResponse:
+    job = meeting.processing_job
     return MeetingResponse(
         id=meeting.id,
         original_filename=meeting.original_filename,
@@ -118,7 +113,23 @@ def meeting_response(meeting: Meeting) -> MeetingResponse:
         summary=meeting.summary,
         action_items=meeting.action_items,
         audio_summary_url=meeting.generated_audio_path,
+        job_id=job.id if job else None,
+        job_status=job.status if job else None,
         created_at=meeting.created_at,
+    )
+
+
+def processing_job_response(job: ProcessingJob) -> ProcessingJobResponse:
+    return ProcessingJobResponse(
+        id=job.id,
+        status=job.status,
+        original_filename=job.original_filename,
+        meeting_id=job.meeting_id,
+        error_message=job.error_message,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+        updated_at=job.updated_at,
     )
 
 
@@ -135,57 +146,26 @@ def meeting_detail(meeting_id: str) -> MeetingResponse:
     return meeting_response(meeting)
 
 
+@app.get("/api/jobs/{job_id}", response_model=ProcessingJobResponse)
+def processing_job_detail(job_id: str) -> ProcessingJobResponse:
+    job = get_processing_job(job_id)
+    if job is None:
+        raise APIError(404, "job_not_found", "The processing job was not found.")
+    return processing_job_response(job)
+
+
 @app.post("/api/process-audio", response_model=ProcessedAudioResponse)
 async def process_audio(file: UploadFile = File(...)) -> ProcessedAudioResponse:
     file_size_bytes = await validate_upload(file)
-    mode = "MOCK" if settings.use_mock_ai else "GEMINI"
-    logger.info("Processing %s using %s mode", file.filename, mode)
-
-    if not settings.use_mock_ai and not settings.gemini_api_key:
-        raise APIError(503, "gemini_not_configured", "Gemini is not configured.")
-
-    try:
-        transcript = await mock_transcribe_audio(file)
-        if settings.use_mock_ai:
-            summary_json_str = await mock_summarize_text(transcript)
-        else:
-            summary_json_str = await gemini_summarize_text(transcript)
-
-        summary_data = json.loads(summary_json_str)
-        if not isinstance(summary_data.get("summary"), str):
-            raise ValueError("Summary response is missing a string summary")
-        if not isinstance(summary_data.get("action_items", []), list):
-            raise ValueError("Summary response action_items must be a list")
-
-        audio_filename = f"summary_{os.urandom(4).hex()}.wav"
-        audio_path = settings.generated_dir / audio_filename
-        await generate_mock_speech(audio_path)
-
-        audio_summary_url = f"/generated/{audio_filename}"
-        meeting = await asyncio.to_thread(
-            create_meeting,
-            original_filename=file.filename or "audio",
-            content_type=(file.content_type or "application/octet-stream").split(";", 1)[0],
-            file_size_bytes=file_size_bytes,
-            transcript=transcript,
-            summary=summary_data["summary"],
-            action_items=summary_data.get("action_items", []),
-            generated_audio_path=audio_summary_url,
-        )
-
-        return ProcessedAudioResponse(
-            meeting_id=meeting.id,
-            transcript=transcript,
-            summary=summary_data["summary"],
-            action_items=summary_data.get("action_items", []),
-            audio_summary_url=audio_summary_url,
-        )
-    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-        logger.exception("AI processing returned an invalid structured response")
-        raise APIError(502, "invalid_ai_response", "The AI service returned an invalid response.") from None
-    except Exception:
-        logger.exception("Audio processing failed")
-        raise APIError(502, "audio_processing_failed", "Audio processing failed. Please try again.") from None
+    job = await asyncio.to_thread(
+        create_processing_job,
+        original_filename=file.filename or "audio",
+    )
+    return await run_processing_job(
+        job_id=job.id,
+        file=file,
+        file_size_bytes=file_size_bytes,
+    )
 
 
 if __name__ == "__main__":

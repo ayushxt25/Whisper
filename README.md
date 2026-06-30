@@ -11,7 +11,7 @@ Repository: [ayushxt25/Whisper](https://github.com/ayushxt25/Whisper)
 - Browser audio recording and file upload
 - Development mock mode with no provider key required
 - Gemini-powered meeting enrichment
-- SQLite meeting persistence through SQLAlchemy
+- SQLite or PostgreSQL meeting persistence through SQLAlchemy
 - Processing jobs with queued, processing, completed, and failed states
 - Meeting history and detail retrieval
 - Search across filenames, transcripts, summaries, action items, keywords, and decisions
@@ -52,7 +52,7 @@ flowchart LR
     MOCK --> AUDIO["Placeholder WAV"]
     GEMINI --> AUDIO
     AUDIO --> ORM["SQLAlchemy"]
-    ORM --> DB["SQLite"]
+    ORM --> DB["SQLite / PostgreSQL"]
     API --> ORM
 ```
 
@@ -92,7 +92,7 @@ sequenceDiagram
 | --- | --- |
 | Frontend | React 19, Vite, Tailwind CSS, Framer Motion |
 | Backend | FastAPI, Python 3.11+, Uvicorn |
-| Persistence | SQLAlchemy, SQLite |
+| Persistence | SQLAlchemy, SQLite (local), PostgreSQL (deployment) |
 | Intelligence | Google Gemini or local mock data |
 | Processing | Synchronous task dispatcher; Redis configuration reserved for worker mode |
 
@@ -115,7 +115,7 @@ Interactive API documentation is available at `http://127.0.0.1:8000/docs` while
 ### Prerequisites
 
 - Python 3.11+
-- Node.js 18+
+- Node.js 20+
 - npm
 - A Gemini API key only when using Gemini mode
 
@@ -161,7 +161,7 @@ Backend configuration lives in `backend/.env`. Start from `backend/.env.example`
 | `USE_MOCK_AI` | `true` | Select full mock mode |
 | `GEMINI_API_KEY` | none | User-provided Gemini key |
 | `GEMINI_MODEL` | `gemini-3.5-flash` | Gemini model identifier |
-| `DATABASE_URL` | `sqlite:///./whisper.db` | SQLAlchemy database URL |
+| `DATABASE_URL` | `sqlite:///./whisper.db` | SQLite locally; PostgreSQL URL in production |
 | `PROCESSING_MODE` | `sync` | Task execution mode (`sync` or worker-ready fallback) |
 | `REDIS_URL` | `redis://localhost:6379/0` | Reserved worker queue connection |
 | `GENERATED_DIR` | `generated` | Generated audio directory |
@@ -179,26 +179,67 @@ Frontend configuration lives in `frontend/.env`:
 VITE_API_BASE_URL=http://localhost:8000
 ```
 
-## Deployment Placeholders
+## Deployment: Vercel + Render + PostgreSQL
 
-### Frontend
+### 1. Render PostgreSQL
 
-- Build with `npm run build`.
-- Deploy `frontend/dist` to a static hosting provider.
-- Set `VITE_API_BASE_URL` to the deployed backend URL before building.
+The included `render.yaml` creates a Render web service and a linked `whisper-postgres` database. For Supabase instead, create a PostgreSQL project and set the Render service's `DATABASE_URL` to its connection string.
 
-### Backend
+The backend accepts `postgres://`, `postgresql://`, and `postgresql+psycopg://` URLs. SQLite remains the local default.
 
-- Deploy the `backend` directory to a Python ASGI hosting provider.
-- Install `backend/requirements.txt` and run Uvicorn against `main:app`.
-- Configure environment variables and persistent storage for generated files.
-- Replace the synchronous worker fallback when a queue worker is introduced.
+### 2. Render Backend
 
-### Database
+Create a Render Blueprint from this repository or configure a Web Service manually:
 
-- SQLite is suitable for local development and single-instance demos.
-- Use a persistent volume when deploying SQLite.
-- Replace `DATABASE_URL` with a managed relational database URL for multi-instance deployment, with a formal migration tool added before production use.
+| Render setting | Value |
+| --- | --- |
+| Root Directory | `backend` |
+| Runtime | Python |
+| Build Command | `pip install -r requirements.txt` |
+| Start Command | `uvicorn main:app --host 0.0.0.0 --port $PORT` |
+| Health Check Path | `/health` |
+
+Required Render environment variables:
+
+```env
+APP_ENVIRONMENT=production
+DATABASE_URL=<Render or Supabase PostgreSQL connection string>
+PROCESSING_MODE=sync
+USE_MOCK_AI=true
+CORS_ORIGINS=https://your-whisper-app.vercel.app
+CORS_ALLOW_CREDENTIALS=false
+GENERATED_DIR=/tmp/whisper-generated
+```
+
+For Gemini mode, also set `GEMINI_API_KEY` and change `USE_MOCK_AI=false`. Users must supply their own key. Keep `CORS_ORIGINS` restricted to the exact Vercel production URL, without a trailing slash. Add additional comma-separated origins only when needed.
+
+### 3. Vercel Frontend
+
+Import the repository into Vercel with these settings:
+
+| Vercel setting | Value |
+| --- | --- |
+| Root Directory | `frontend` |
+| Framework Preset | Vite |
+| Install Command | `npm install` |
+| Build Command | `npm run build` |
+| Output Directory | `dist` |
+
+Set this Vercel environment variable for Production and Preview as appropriate:
+
+```env
+VITE_API_BASE_URL=https://your-whisper-api.onrender.com
+```
+
+Redeploy the frontend after changing `VITE_API_BASE_URL`. After Vercel assigns the production domain, update Render's `CORS_ORIGINS` and redeploy the backend.
+
+### Generated Audio Limitation
+
+Generated WAV files are served correctly from `/generated`, but Render's default filesystem is ephemeral. Files stored under `/tmp/whisper-generated` can disappear after a restart, redeploy, or instance replacement. Meeting records remain in PostgreSQL, but old audio URLs may stop working. Production-grade durable audio requires object storage or a Render persistent disk, which is not implemented in the application yet.
+
+### Database Lifecycle
+
+The backend creates missing tables on startup. Use a formal migration tool before making production schema changes after launch. Do not use SQLite for a multi-instance Render deployment.
 
 ## Screenshots
 

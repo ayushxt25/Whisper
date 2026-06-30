@@ -33,6 +33,10 @@ def _database_url() -> str:
     if value.startswith(prefix):
         database_path = (BASE_DIR / value.removeprefix(prefix)).resolve()
         return f"sqlite:///{database_path.as_posix()}"
+    if value.startswith("postgres://"):
+        return value.replace("postgres://", "postgresql+psycopg://", 1)
+    if value.startswith("postgresql://"):
+        return value.replace("postgresql://", "postgresql+psycopg://", 1)
     return value
 
 

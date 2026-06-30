@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: whisper-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENVIRONMENT
+        value: production
+      - key: USE_MOCK_AI
+        value: "true"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash
+      - key: DATABASE_URL
+        fromDatabase:
+          name: whisper-postgres
+          property: connectionString
+      - key: PROCESSING_MODE
+        value: sync
+      - key: GENERATED_DIR
+        value: /tmp/whisper-generated
+      - key: CORS_ORIGINS
+        sync: false
+      - key: CORS_ALLOW_CREDENTIALS
+        value: "false"
+      - key: CORS_ALLOW_METHODS
+        value: GET,POST,OPTIONS
+      - key: CORS_ALLOW_HEADERS
+        value: Content-Type,Authorization
+
+databases:
+  - name: whisper-postgres
+    plan: free
+    databaseName: whisper
+    user: whisper

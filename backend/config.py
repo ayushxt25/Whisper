@@ -36,12 +36,21 @@ def _database_url() -> str:
     return value
 
 
+def _processing_mode() -> str:
+    value = os.getenv("PROCESSING_MODE", "sync").strip().lower()
+    if value not in {"sync", "worker"}:
+        raise RuntimeError("PROCESSING_MODE must be 'sync' or 'worker'")
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str
     app_environment: str
     use_mock_ai: bool
     database_url: str
+    processing_mode: str
+    redis_url: str
     gemini_api_key: str
     gemini_model: str
     generated_dir: Path
@@ -66,6 +75,8 @@ settings = Settings(
         os.getenv("APP_ENVIRONMENT", "development").strip().lower() == "development",
     ),
     database_url=_database_url(),
+    processing_mode=_processing_mode(),
+    redis_url=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
     gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
     gemini_model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash"),
     generated_dir=_path("GENERATED_DIR", "generated"),

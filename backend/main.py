@@ -16,12 +16,13 @@ from db_models import Meeting, ProcessingJob
 from errors import APIError
 from job_repository import create_processing_job, get_processing_job
 from models import MeetingResponse, ProcessedAudioResponse, ProcessingJobResponse, SearchResultResponse
-from processor import run_processing_job
 from repository import get_meeting, list_meetings, search_meetings
+from task_dispatcher import AudioProcessingPayload, build_task_dispatcher
 
 
 logger = logging.getLogger("uvicorn.error")
 app = FastAPI(title=settings.app_name)
+task_dispatcher = build_task_dispatcher()
 
 app.add_middleware(
     CORSMiddleware,
@@ -198,10 +199,12 @@ async def process_audio(file: UploadFile = File(...)) -> ProcessedAudioResponse:
         create_processing_job,
         original_filename=file.filename or "audio",
     )
-    return await run_processing_job(
-        job_id=job.id,
-        file=file,
-        file_size_bytes=file_size_bytes,
+    return await task_dispatcher.dispatch(
+        AudioProcessingPayload(
+            job_id=job.id,
+            file=file,
+            file_size_bytes=file_size_bytes,
+        )
     )
 
 

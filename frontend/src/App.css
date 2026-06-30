@@ -300,10 +300,27 @@
 @media (max-width: 1024px) {
   .panel-grid { grid-template-columns: 1fr; }
   .sidebar { display: none; }
+  .history-view { flex-direction: column; }
+  .history-view .sidebar {
+    display: flex;
+    position: static;
+    width: 100%;
+    height: auto;
+    max-height: 440px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+  }
   .main-content { padding: 1.25rem 1rem 4rem; }
 }
 
 @media (max-width: 640px) {
+  .navbar-actions { display: none; }
+  .navbar > div:first-child .badge { display: none; }
+  .nav-links-center {
+    position: static !important;
+    transform: none !important;
+    margin-left: auto;
+  }
   .hero-title { font-size: 1.6rem; }
   .main-content { padding: 1rem 0.75rem 4rem; }
 }

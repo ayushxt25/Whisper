@@ -6,11 +6,15 @@ __pycache__/
 *.py[cod]
 *$py.class
 venv/
+.venv/
 *.so
 .Python
 build/
 dist/
 *.egg-info/
+*.db
+*.db-shm
+*.db-wal
 
 # Node
 node_modules/

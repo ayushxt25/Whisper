@@ -47,22 +47,14 @@ const WordCountIcon = () => (
   </svg>
 );
 
-const MOCK_TRANSCRIPT = `So today we went over the Q3 roadmap and there were a few things that came up. First, the onboarding flow needs work — users are dropping off after step two. We think better tooltips and a progress indicator would help significantly.
-
-Second, churn is up slightly and the growth team wants to try in-app nudges before the user hits the cancel screen. We've seen this work well at other companies and it's worth a shot before we invest in a bigger retention push.
-
-Third, the mobile redesign is on track but we need the mockups finalized before the engineers can start. I'll put together the spec doc for onboarding v2 over the weekend.
-
-Let's sync again after the A/B test results come in next Thursday. Make sure everyone has access to the shared Notion doc before then.`;
-
 const TranscriptPanel = ({ transcript }) => {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const text = transcript || MOCK_TRANSCRIPT;
-  const wordCount = text.trim().split(/\s+/).length;
+  const text = transcript || '';
+  const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
   const charCount = text.length;
-  const readTime = Math.max(1, Math.ceil(wordCount / 200));
+  const readTime = wordCount ? Math.max(1, Math.ceil(wordCount / 200)) : 0;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(text).then(() => {
